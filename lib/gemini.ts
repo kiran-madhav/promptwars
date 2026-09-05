@@ -1,7 +1,7 @@
 import { VerificationReport } from "./types";
 
 const GEMINI_API_URL =
-  "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent";
+  "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.7-flash:generateContent";
 
 const SYSTEM_PROMPT = `You are a media forensics AI assistant integrated into VERIFAI, a media verification platform for journalists, researchers, and citizens.
 
