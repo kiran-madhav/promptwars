@@ -47,6 +47,10 @@ export interface AnalysisResponse {
   fileSize: number;
   mimeType: string;
   analyzedAt: string;
+  /** How the image was submitted */
+  sourceType: "upload" | "url";
+  /** Only present when sourceType is "url" — the exact URL the user provided */
+  sourceUrl?: string;
 }
 
 export interface AnalysisError {

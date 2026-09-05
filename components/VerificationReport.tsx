@@ -116,68 +116,67 @@ function SignalCard({ signal }: { signal: Signal }) {
 
 interface SourceProvenanceProps {
   sourceSignals: Array<{ type: string; observation: string }>;
+  sourceType: "upload" | "url";
+  sourceUrl?: string;
 }
 
-function SourceProvenance({ sourceSignals }: SourceProvenanceProps) {
+function SourceProvenance({ sourceSignals, sourceType, sourceUrl }: SourceProvenanceProps) {
+  const verificationSteps = [
+    { step: "Run a reverse image search", detail: "Use Google Images, TinEye, or Yandex to find the earliest known publication of this image." },
+    { step: "Locate the original source", detail: "Identify where the image was first published, by whom, and in what context." },
+    { step: "Compare across sources", detail: "Check whether independent outlets report the same image with consistent context." },
+    { step: "Verify the metadata independently", detail: "Use tools such as Jeffrey's Exif Viewer or ExifTool to inspect embedded metadata in the original file." },
+  ];
+
   return (
     <Section title="Source & Provenance">
       <div className="rounded-xl border border-gray-800 bg-gray-900/40 overflow-hidden">
-        {/* Always-present: direct upload row */}
-        <div className="px-5 py-4">
-          <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-            Upload source
-          </span>
-          <p className="text-gray-300 text-sm mt-1">
-            Direct upload — original source URL not provided
-          </p>
-          <p className="text-gray-500 text-xs mt-1">
-            The image was submitted directly. No prior publication context is available to VERIFAI.
-          </p>
-        </div>
+        {sourceType === "url" ? (
+          <div className="px-5 py-4">
+            <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">Source</span>
+            <p className="text-gray-300 text-sm mt-1">User-provided image URL</p>
+            {sourceUrl && (
+              <div className="mt-3">
+                <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">Source URL</span>
+                <p className="text-gray-400 text-xs font-mono mt-1 break-all leading-relaxed bg-gray-950/60 rounded-lg px-3 py-2 border border-gray-800">
+                  {sourceUrl}
+                </p>
+              </div>
+            )}
+            <p className="text-gray-500 text-xs mt-3 leading-relaxed">
+              VERIFAI fetched this image from the URL above for visual analysis only.
+              The URL has not been verified as the original source of publication.
+              VERIFAI did not check the publisher, creation date, author, or geographic origin.
+            </p>
+          </div>
+        ) : (
+          <div className="px-5 py-4">
+            <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">Source</span>
+            <p className="text-gray-300 text-sm mt-1">Direct upload — original source URL not provided</p>
+            <p className="text-gray-500 text-xs mt-1">
+              The image was submitted directly. No prior publication context is available to VERIFAI.
+            </p>
+          </div>
+        )}
 
-        {/* AI-observed source signals from visible image content */}
         {sourceSignals && sourceSignals.length > 0 && (
           <>
             <div className="border-t border-gray-800 px-5 py-2">
-              <span className="text-xs font-semibold uppercase tracking-wide text-gray-600">
-                Visible content signals
-              </span>
+              <span className="text-xs font-semibold uppercase tracking-wide text-gray-600">Visible content signals</span>
             </div>
             {sourceSignals.map((s, i) => (
               <div key={i} className="border-t border-gray-800/60 px-5 py-4">
-                <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-                  {s.type.replace(/_/g, " ")}
-                </span>
+                <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">{s.type.replace(/_/g, " ")}</span>
                 <p className="text-gray-300 text-sm mt-1">{s.observation}</p>
               </div>
             ))}
           </>
         )}
 
-        {/* Verification guidance — always shown */}
         <div className="border-t border-gray-800 bg-gray-900/60 px-5 py-4">
-          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-3">
-            Recommended verification steps
-          </p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-3">Recommended verification steps</p>
           <ul className="space-y-2">
-            {[
-              {
-                step: "Run a reverse image search",
-                detail: "Use Google Images, TinEye, or Yandex to find the earliest known publication of this image.",
-              },
-              {
-                step: "Locate the original source",
-                detail: "Identify where the image was first published, by whom, and in what context.",
-              },
-              {
-                step: "Compare across sources",
-                detail: "Check whether independent outlets report the same image with consistent context.",
-              },
-              {
-                step: "Verify the metadata independently",
-                detail: "Use tools such as Jeffrey's Exif Viewer or ExifTool to inspect embedded metadata in the original file.",
-              },
-            ].map(({ step, detail }) => (
+            {verificationSteps.map(({ step, detail }) => (
               <li key={step} className="flex items-start gap-2.5 text-sm">
                 <span className="text-blue-500 mt-0.5 shrink-0 text-xs font-bold">→</span>
                 <div>
@@ -212,7 +211,7 @@ export function VerificationReport({ result, onReset }: Props) {
     );
   }
 
-  const { report, filename, fileSize, mimeType, analyzedAt } = result;
+  const { report, filename, fileSize, mimeType, analyzedAt, sourceType, sourceUrl } = result;
   const assessment = ASSESSMENT_CONFIG[report.overallAssessment];
   const confColor = CONFIDENCE_COLOR[report.confidence];
 
@@ -265,7 +264,11 @@ export function VerificationReport({ result, onReset }: Props) {
       )}
 
       {/* ── Source & Provenance (always rendered) ── */}
-      <SourceProvenance sourceSignals={report.sourceSignals ?? []} />
+      <SourceProvenance
+        sourceSignals={report.sourceSignals ?? []}
+        sourceType={sourceType ?? "upload"}
+        sourceUrl={sourceUrl}
+      />
 
       {/* ── Media details / metadata ── */}
       <Section title="Media Details">

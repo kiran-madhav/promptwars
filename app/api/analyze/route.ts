@@ -78,6 +78,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<AnalysisR
       fileSize: file.size,
       mimeType: file.type,
       analyzedAt: new Date().toISOString(),
+      sourceType: "upload",
     });
   } catch (err) {
     console.error("[/api/analyze]", err);
