@@ -30,7 +30,7 @@ function InputModeTabs({ active, onChange }: InputModeTabsProps) {
       {(
         [
           { id: "upload" as const, label: "Upload Image", icon: "📁" },
-          { id: "url" as const, label: "Image URL", icon: "🔗" },
+          { id: "url" as const, label: "Direct image URL", icon: "🔗" },
         ] as const
       ).map((tab) => (
         <button
@@ -241,7 +241,7 @@ export default function Home() {
 
 function Disclaimer() {
   return (
-    <p className="mt-5 text-center text-xs text-gray-500 max-w-xl mx-auto leading-relaxed">
+    <p className="mt-5 text-center text-xs text-gray-400 max-w-xl mx-auto leading-relaxed">
       VERIFAI provides probabilistic AI-assisted analysis, not definitive forensic proof.
       Results should be used as one input among many in a verification process.
     </p>
@@ -250,7 +250,7 @@ function Disclaimer() {
 
 function Footer() {
   return (
-    <footer className="border-t border-gray-800 mt-20 py-8 text-center text-xs text-gray-600">
+    <footer className="border-t border-gray-800 mt-20 py-8 text-center text-xs text-gray-400">
       <p>VERIFAI · AI-Assisted Media Verification · Analysis is probabilistic, not conclusive.</p>
     </footer>
   );
