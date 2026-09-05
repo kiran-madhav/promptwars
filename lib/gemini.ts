@@ -10,44 +10,76 @@ Your task is to analyze the provided image and return a structured JSON assessme
 === CORE PRINCIPLES ===
 
 1. PROBABILISTIC LANGUAGE ONLY
-   - Never claim definitive proof. Use language like "may suggest", "is consistent with", "could indicate".
+   - Never claim definitive proof. Use language such as "may suggest", "is consistent with", "could indicate".
    - Valid verdict values: "likely_authentic" | "potentially_manipulated" | "likely_synthetic" | "inconclusive"
    - When in doubt, use "inconclusive".
 
-2. ONLY REPORT WHAT YOU CAN OBSERVE
+2. CONFIDENCE LIMITS — CRITICAL RULE
+   - This analysis is VISUAL-ONLY. You have no access to provenance data, metadata tools, reverse-image search, or any external source.
+   - Because of this, the following hard limits apply:
+     * "likely_authentic" + "high" confidence is FORBIDDEN. Never use this combination.
+     * For "likely_authentic", the maximum permitted confidence is "medium".
+     * Rationale: the absence of visible synthetic indicators does not prove authenticity.
+       It only means no specific problems were observed visually. Provenance cannot be established by sight alone.
+     * You MAY use "high" confidence for "likely_synthetic" or "potentially_manipulated"
+       when strong, specific, observable indicators are present.
+   - Summary text for "likely_authentic" results MUST include a caveat such as:
+       "Visual characteristics are consistent with an authentic photograph, with no major
+        synthetic indicators observed. However, visual inspection alone cannot establish
+        provenance or rule out subtle editing."
+   - Do NOT use: "proves authentic", "confirmed authentic", "definitely real",
+     "verified authentic", or "genuine" without independent evidence.
+
+3. ONLY REPORT WHAT YOU CAN OBSERVE
    - Only include signals you can directly observe in the image content.
-   - Do not invent technical readings, metadata values, URLs, publisher names, creation dates, GPS coordinates, or original creators.
+   - Do not invent technical readings, metadata values, URLs, publisher names,
+     creation dates, GPS coordinates, or original creators.
    - If you cannot observe something, say so explicitly in limitations.
 
-3. EVIDENCE vs. INTERPRETATION — KEEP THEM SEPARATE
-   - "observation": describe ONLY what is directly visible (e.g. "skin texture appears unnaturally smooth in the cheek region")
-   - "explanation": explain why this pattern is noteworthy for authenticity assessment
-   - "evidence": specify the exact region, object, or feature in the image (e.g. "left cheek and jawline area")
+4. EVIDENCE vs. INTERPRETATION — KEEP THEM SEPARATE
+   - "observation": describe ONLY what is directly visible.
+     Example: "skin texture appears unnaturally smooth in the cheek region"
+   - "explanation": why this pattern is relevant to authenticity, including alternative causes.
+   - "evidence": the exact region, object, or feature where this was observed.
+     Example: "left cheek and jawline area"
    - Do not mix observation with interpretation in the same field.
 
-4. METADATA LANGUAGE — CRITICAL RULE
+5. SIGNAL QUALITY OVER QUANTITY
+   - Do NOT generate signals to fill the report. Quality beats quantity.
+   - If there are only 1–2 meaningful observations, return 1–2 signals.
+   - Do not treat generic statements like "the image looks realistic" as evidence.
+   - Preferred signal categories (only when genuinely observed):
+     * Lighting and shadow consistency
+     * Reflection accuracy
+     * Anatomy or geometry errors
+     * Object boundary blending
+     * Perspective consistency
+     * Repeated textures or tiling patterns
+     * Text or logo rendering quality
+     * Fine-detail consistency (hair, fabric, foliage)
+     * Rendering or compression artifacts
+   - Severity "high": strong, specific, observable indicator of manipulation or synthesis.
+   - Severity "medium": noteworthy pattern, but explainable by other means.
+   - Severity "low": minor observation noted for completeness only.
+
+6. METADATA LANGUAGE — CRITICAL RULE
    - You cannot read EXIF metadata from an image sent via API. Do NOT claim you have read EXIF data.
-   - If metadata appears absent or minimal, explain that this can occur for MULTIPLE reasons:
-     * The image may have been synthetically generated (which typically produces no EXIF)
-     * The image may have been edited and re-saved, stripping metadata
-     * The image may have been re-encoded or transcoded
-     * The image may be a screenshot
+   - Missing or minimal metadata can occur for multiple reasons:
+     * Synthetically generated images typically produce no EXIF
+     * Images may have been edited and re-saved, stripping metadata
+     * Images may have been re-encoded or transcoded
+     * Images may be screenshots
      * Social media platforms routinely strip metadata on upload
    - Never state or imply that "missing EXIF = AI generated". That is not a valid conclusion.
-   - Only note metadata observations when you have genuine grounds for them.
+   - Only note metadata observations when you have genuine visual grounds for them.
 
-5. SOURCE & PROVENANCE — NEVER INVENT
+7. SOURCE & PROVENANCE — NEVER INVENT
    - You have no access to the internet, reverse image search, or any database.
-   - Do NOT invent: original URLs, publication dates, news sources, photographer names, locations, or prior appearances.
-   - sourceSignals should only contain observations genuinely derivable from the image content itself (e.g. visible watermarks, logos, text overlays, platform UI elements visible in the image).
+   - Do NOT invent: original URLs, publication dates, news sources, photographer names,
+     locations, or prior appearances.
+   - sourceSignals should only contain observations genuinely derivable from the visible
+     image content itself (e.g. visible watermarks, logos, text overlays, platform UI elements).
    - If no genuine source signals exist, return an empty sourceSignals array [].
-
-6. SIGNALS DISCIPLINE
-   - Include 0–8 signals. Only include genuine observations.
-   - Do not pad with trivial or speculative signals.
-   - Severity "high" means: a strong, specific, observable indicator of manipulation or synthesis.
-   - Severity "medium" means: a noteworthy pattern worth flagging, but explainable by other means.
-   - Severity "low" means: a minor observation that is noted for completeness.
 
 === REQUIRED JSON SCHEMA ===
 
@@ -56,27 +88,27 @@ Respond with ONLY a valid JSON object (no markdown fences, no explanation outsid
 {
   "overallAssessment": "likely_authentic" | "potentially_manipulated" | "likely_synthetic" | "inconclusive",
   "confidence": "low" | "medium" | "high",
-  "summary": "2–4 sentence human-readable summary. Use probabilistic language. Do not claim proof.",
+  "summary": "2–4 sentences. Use probabilistic language. If likely_authentic, include the provenance caveat.",
   "signals": [
     {
       "severity": "low" | "medium" | "high",
-      "title": "Short descriptive title (e.g. 'Inconsistent lighting direction')",
-      "observation": "What is directly visible in the image — describe only what you can see",
-      "explanation": "Why this pattern is relevant to authenticity assessment, including alternative explanations",
+      "title": "Short descriptive title (e.g. 'Inconsistent shadow direction')",
+      "observation": "What is directly visible — describe only what you can see",
+      "explanation": "Why this pattern is relevant, including alternative explanations",
       "evidence": "Specific region, object, or feature in the image where this was observed"
     }
   ],
   "sourceSignals": [
     {
       "type": "visible_watermark | platform_ui_element | text_overlay | logo | other",
-      "observation": "Only observations derivable from the visible image content — no invented provenance"
+      "observation": "Only observations derivable from the visible image content"
     }
   ],
   "metadataObservations": [
     {
       "field": "e.g. 'Apparent compression artifacts' or 'Color profile consistency'",
-      "value": "Observable characteristic (not claimed EXIF values)",
-      "significance": "Factual note on what this may or may not indicate, including alternative causes"
+      "value": "Observable visual characteristic (not claimed EXIF values)",
+      "significance": "Factual note including alternative causes — never assert EXIF was checked"
     }
   ],
   "limitations": [
@@ -90,7 +122,32 @@ Respond with ONLY a valid JSON object (no markdown fences, no explanation outsid
 Always include:
 - At least two entries in limitations
 - At least two entries in recommendedActions
-- The limitation that AI visual analysis cannot access EXIF data, internet sources, or forensic tools`;
+- The limitation that visual-only AI analysis cannot establish provenance, access EXIF data, or perform reverse-image search`;
+
+// ─── Server-side confidence enforcement ──────────────────────────────────────
+//
+// This is a hard guardrail applied AFTER the model responds.
+// It ensures that even if the model ignores the prompt instruction,
+// "likely_authentic" + "high" is never delivered to the client.
+//
+// Rationale: visual inspection cannot establish provenance.
+// "No visible synthetic indicators" ≠ "proven authentic".
+
+function enforceConfidenceLimits(report: VerificationReport): VerificationReport {
+  if (report.overallAssessment === "likely_authentic" && report.confidence === "high") {
+    return {
+      ...report,
+      confidence: "medium",
+      // Append a note to the summary so the report remains self-consistent.
+      summary: report.summary.replace(/\.\s*$/, "") +
+        " Confidence has been capped at medium because visual inspection alone " +
+        "cannot establish provenance or rule out undetectable manipulation.",
+    };
+  }
+  return report;
+}
+
+// ─── Main export ─────────────────────────────────────────────────────────────
 
 export async function analyzeImageWithGemini(
   imageBase64: string,
@@ -161,10 +218,11 @@ export async function analyzeImageWithGemini(
     );
   }
 
-  // Basic validation
+  // Basic structural validation
   if (!parsed.overallAssessment || !parsed.confidence || !parsed.summary) {
     throw new Error("AI response missing required fields.");
   }
 
-  return parsed;
+  // Apply server-side guardrails — always runs regardless of model behaviour
+  return enforceConfidenceLimits(parsed);
 }
