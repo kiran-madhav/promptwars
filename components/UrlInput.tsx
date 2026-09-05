@@ -43,7 +43,7 @@ export function UrlInput({ onUrl, disabled = false }: UrlInputProps) {
             htmlFor="image-url-input"
             className="text-sm font-medium text-gray-300"
           >
-            Image URL
+            Direct image URL
           </label>
 
           {/* Input row */}
@@ -110,8 +110,11 @@ export function UrlInput({ onUrl, disabled = false }: UrlInputProps) {
 
           {/* Guidance */}
           <p className="text-xs text-gray-600 leading-relaxed">
-            Paste a direct link to a publicly accessible image (JPEG, PNG, WebP, GIF · max 10 MB).
-            The image is fetched server-side and analyzed with the same pipeline as uploads.
+            Paste the direct address of a publicly accessible image — the URL must link to the image file
+            itself (JPEG, PNG, WebP, or GIF), not to a webpage containing it. Max 10 MB.
+            <span className="block mt-1 text-gray-500">
+              Tip: right-click an image in your browser and choose &quot;Copy image address&quot;.
+            </span>
           </p>
         </div>
       </form>

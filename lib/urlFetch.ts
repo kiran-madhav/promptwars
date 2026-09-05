@@ -149,9 +149,16 @@ export async function fetchImageFromUrl(rawUrl: string): Promise<FetchedImage> {
   // Validate Content-Type before buffering
   const contentType = (response.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase();
   if (!ALLOWED_IMAGE_TYPES.has(contentType)) {
+    if (contentType.startsWith("text/html")) {
+      throw new Error(
+        "This URL points to a webpage, not directly to an image. " +
+          "VERIFAI accepts direct image URLs that return JPEG, PNG, WebP, or GIF content. " +
+          "Tip: open the image itself in your browser and copy its address."
+      );
+    }
     throw new Error(
-      `The URL does not point to a supported image (received Content-Type: "${contentType}"). ` +
-        "Supported formats: JPEG, PNG, WebP, GIF."
+      `This URL does not point to a supported image format. ` +
+        "VERIFAI accepts direct image URLs returning JPEG, PNG, WebP, or GIF."
     );
   }
 
