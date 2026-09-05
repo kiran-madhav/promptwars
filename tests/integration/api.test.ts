@@ -157,6 +157,26 @@ describe("VERIFAI Integration Tests", async () => {
       assert.equal(r.body.success, false);
     });
 
+    test("file too large (> 10MB) → handles Next.js 413 or API 400 gracefully", async (t) => {
+      if (!serverUp) return t.skip("server not running");
+      // Use 11MB to ensure we cross both the API limit and Next.js body parser limit
+      const largeBytes = Buffer.alloc(11 * 1024 * 1024, "a");
+      const { body, contentType } = multipartUpload("test.jpg", "image/jpeg", largeBytes);
+      const r = await httpRequest("POST", "/api/analyze", contentType, body);
+      
+      // We accept 400 (our route handler caught it) or 413 (Next.js/Vercel server caught it)
+      assert.ok(r.status === 400 || r.status === 413, `Expected 400 or 413, got ${r.status}`);
+      
+      if (r.status === 413) {
+        // If 413, the body might be plain text parsed into our 'raw' fallback
+        assert.ok(r.body.raw !== undefined || r.body.success === false, "Should handle non-JSON 413 response gracefully");
+      } else {
+        // If 400, it should be our standard JSON error
+        assert.equal(r.body.success, false);
+        assert.ok(typeof r.body.error === "string");
+      }
+    });
+
     test("valid JPEG → HTTP 200, valid VerificationReport schema, confidence guardrail holds", async (t) => {
       if (!serverUp) return t.skip("server not running");
       const { body, contentType } = multipartUpload("test.jpg", "image/jpeg", imgBytes);

@@ -72,9 +72,31 @@ export default function Home() {
     async (fetchPromise: Promise<Response>) => {
       try {
         const res = await fetchPromise;
-        const data = (await res.json()) as AnalysisResult;
+        const contentType = res.headers.get("content-type") || "";
+        
+        let data: AnalysisResult;
+        if (contentType.includes("application/json")) {
+          data = (await res.json()) as AnalysisResult;
+        } else {
+          // If the server returns 413 Payload Too Large as text/html or text/plain
+          await res.text(); // Consume the stream
+          const errorMsg = res.status === 413 
+            ? "File too large for the server to process. Please try a smaller image."
+            : `Unexpected server response (${res.status}).`;
+          data = { success: false, error: errorMsg };
+        }
+
+        if (!data.success) {
+          setResult({
+            success: false,
+            error: data.error || "Analysis failed. Please try again.",
+          });
+          setAppState("error");
+          return;
+        }
+
         setResult(data);
-        setAppState(data.success ? "result" : "error");
+        setAppState("result");
         setTimeout(() => {
           resultRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
         }, 100);
