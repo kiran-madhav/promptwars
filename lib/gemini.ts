@@ -197,18 +197,44 @@ export async function analyzeImageWithGemini(
     },
   };
 
-  const response = await fetch(`${GEMINI_API_URL}?key=${apiKey}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
+  const GEMINI_FALLBACK_API_URL =
+    "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent";
 
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    const message =
-      (errorData as { error?: { message?: string } })?.error?.message ||
-      `Gemini API error: ${response.status}`;
-    throw new Error(message);
+  async function attemptFetch(url: string, key: string) {
+    const response = await fetch(`${url}?key=${key}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      const message =
+        (errorData as { error?: { message?: string } })?.error?.message ||
+        `Gemini API error: ${response.status}`;
+      const err = new Error(message) as Error & { status?: number };
+      err.status = response.status;
+      throw err;
+    }
+    return response;
+  }
+
+  let response: Response;
+  try {
+    response = await attemptFetch(GEMINI_API_URL, apiKey);
+  } catch (err: unknown) {
+    const error = err as Error & { status?: number };
+    const status = error.status;
+    const isNetworkError = error.name === "TypeError" || error.name === "AbortError";
+    const isTransientHttp = status === 429 || (status && status >= 500);
+    
+    const fallbackKey = process.env.GEMINI_FALLBACK_API_KEY;
+    if ((isNetworkError || isTransientHttp) && fallbackKey) {
+      console.warn(`[Gemini API] Primary model failed (Status: ${status || error.name}). Falling back to gemini-3.6-flash...`);
+      response = await attemptFetch(GEMINI_FALLBACK_API_URL, fallbackKey);
+    } else {
+      throw error;
+    }
   }
 
   const data = (await response.json()) as {
