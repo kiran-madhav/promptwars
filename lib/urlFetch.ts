@@ -100,8 +100,10 @@ function isBlockedHostname(hostname: string): boolean {
     if (a === 203 && b === 0 && Number(ipv4Match[3]) === 113) return true; // 203.0.113.0/24 documentation
   }
 
-  // Block IPv6 private ranges (simplified)
-  if (h.startsWith("fc") || h.startsWith("fd") || h.startsWith("fe80")) return true;
+  // Block IPv6 private ranges.
+  // URL.hostname wraps bare IPv6 in brackets: "[fd00::1]" — strip them first.
+  const bare = h.startsWith("[") && h.endsWith("]") ? h.slice(1, -1) : h;
+  if (bare.startsWith("fc") || bare.startsWith("fd") || bare.startsWith("fe80")) return true;
 
   return false;
 }

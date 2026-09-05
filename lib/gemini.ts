@@ -1,4 +1,4 @@
-import { VerificationReport } from "./types";
+import type { VerificationReport } from "./types.ts";
 
 const GEMINI_API_URL =
   "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.7-flash:generateContent";
@@ -152,7 +152,7 @@ Always include:
 // Rationale: visual inspection cannot establish provenance.
 // "No visible synthetic indicators" ≠ "proven authentic".
 
-function enforceConfidenceLimits(report: VerificationReport): VerificationReport {
+export function enforceConfidenceLimits(report: VerificationReport): VerificationReport {
   if (report.overallAssessment === "likely_authentic" && report.confidence === "high") {
     return {
       ...report,
