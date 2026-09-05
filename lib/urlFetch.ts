@@ -120,94 +120,100 @@ export async function fetchImageFromUrl(rawUrl: string): Promise<FetchedImage> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
 
-  let response: Response;
   try {
-    response = await fetch(parsed.href, {
-      signal: controller.signal,
-      redirect: "follow",
-      headers: {
-        // Identify ourselves politely
-        "User-Agent": "VERIFAI-MediaVerifier/1.0",
-        Accept: "image/*",
-      },
-    });
-  } catch (err) {
-    clearTimeout(timer);
-    if (err instanceof Error && err.name === "AbortError") {
-      throw new Error("Request timed out after 10 seconds. The URL may be slow or unreachable.");
+    let response: Response;
+    try {
+      response = await fetch(parsed.href, {
+        signal: controller.signal,
+        redirect: "follow",
+        headers: {
+          // Identify ourselves politely
+          "User-Agent": "VERIFAI-MediaVerifier/1.0",
+          Accept: "image/*",
+        },
+      });
+    } catch (err) {
+      if (err instanceof Error && err.name === "AbortError") {
+        throw new Error("Request timed out after 10 seconds. The URL may be slow or unreachable.");
+      }
+      throw new Error("Failed to reach the URL. Please check the address and try again.");
     }
-    throw new Error("Failed to reach the URL. Please check the address and try again.");
-  } finally {
-    clearTimeout(timer);
-  }
 
-  if (!response.ok) {
-    throw new Error(
-      `The server at that URL returned an error (HTTP ${response.status}). ` +
-        "Please verify the URL is publicly accessible."
-    );
-  }
-
-  // Validate Content-Type before buffering
-  const contentType = (response.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase();
-  if (!ALLOWED_IMAGE_TYPES.has(contentType)) {
-    if (contentType.startsWith("text/html")) {
+    if (!response.ok) {
       throw new Error(
-        "This URL points to a webpage, not directly to an image. " +
-          "VERIFAI accepts direct image URLs that return JPEG, PNG, WebP, or GIF content. " +
-          "Tip: open the image itself in your browser and copy its address."
+        `The server at that URL returned an error (HTTP ${response.status}). ` +
+          "Please verify the URL is publicly accessible."
       );
     }
-    throw new Error(
-      `This URL does not point to a supported image format. ` +
-        "VERIFAI accepts direct image URLs returning JPEG, PNG, WebP, or GIF."
-    );
-  }
 
-  // Enforce size limit — check Content-Length header first to fail fast
-  const declaredLength = parseInt(response.headers.get("content-length") ?? "0", 10);
-  if (declaredLength > MAX_FETCH_BYTES) {
-    throw new Error(
-      `The image at that URL is too large (${(declaredLength / 1024 / 1024).toFixed(1)} MB). ` +
-        "Maximum allowed size is 10 MB."
-    );
-  }
-
-  // Buffer with streaming size check
-  const reader = response.body?.getReader();
-  if (!reader) {
-    throw new Error("Could not read the response body.");
-  }
-
-  const chunks: Uint8Array[] = [];
-  let totalBytes = 0;
-
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      totalBytes += value.byteLength;
-      if (totalBytes > MAX_FETCH_BYTES) {
-        reader.cancel();
-        throw new Error("The image exceeds the 10 MB limit and was not downloaded.");
+    // Validate Content-Type before buffering
+    const contentType = (response.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase();
+    if (!ALLOWED_IMAGE_TYPES.has(contentType)) {
+      if (contentType.startsWith("text/html")) {
+        throw new Error(
+          "This URL points to a webpage, not directly to an image. " +
+            "VERIFAI accepts direct image URLs that return JPEG, PNG, WebP, or GIF content. " +
+            "Tip: open the image itself in your browser and copy its address."
+        );
       }
-      chunks.push(value);
+      throw new Error(
+        `This URL does not point to a supported image format. ` +
+          "VERIFAI accepts direct image URLs returning JPEG, PNG, WebP, or GIF."
+      );
     }
+
+    // Enforce size limit — check Content-Length header first to fail fast
+    const declaredLength = parseInt(response.headers.get("content-length") ?? "0", 10);
+    if (declaredLength > MAX_FETCH_BYTES) {
+      throw new Error(
+        `The image at that URL is too large (${(declaredLength / 1024 / 1024).toFixed(1)} MB). ` +
+          "Maximum allowed size is 10 MB."
+      );
+    }
+
+    // Buffer with streaming size check
+    const reader = response.body?.getReader();
+    if (!reader) {
+      throw new Error("Could not read the response body.");
+    }
+
+    const chunks: Uint8Array[] = [];
+    let totalBytes = 0;
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        totalBytes += value.byteLength;
+        if (totalBytes > MAX_FETCH_BYTES) {
+          reader.cancel().catch(() => {}); // Catch cancel errors to avoid unhandled rejections
+          throw new Error("The image exceeds the 10 MB limit and was not downloaded.");
+        }
+        chunks.push(value);
+      }
+    } catch (err) {
+      if (err instanceof Error && err.name === "AbortError") {
+        throw new Error("Request timed out while downloading the image. The server may be too slow.");
+      }
+      throw err;
+    } finally {
+      reader.releaseLock();
+    }
+
+    if (totalBytes === 0) {
+      throw new Error("The URL returned an empty response.");
+    }
+
+    const buffer = Buffer.concat(chunks.map((c) => Buffer.from(c)));
+    const base64 = buffer.toString("base64");
+
+    // Best-effort filename from URL path
+    const pathSegments = parsed.pathname.split("/").filter(Boolean);
+    const lastSegment = pathSegments[pathSegments.length - 1] ?? "image";
+    const filename = lastSegment.length > 0 ? lastSegment : "image";
+
+    return { base64, mimeType: contentType, fileSize: totalBytes, filename };
   } finally {
-    reader.releaseLock();
+    clearTimeout(timer);
   }
-
-  if (totalBytes === 0) {
-    throw new Error("The URL returned an empty response.");
-  }
-
-  const buffer = Buffer.concat(chunks.map((c) => Buffer.from(c)));
-  const base64 = buffer.toString("base64");
-
-  // Best-effort filename from URL path
-  const pathSegments = parsed.pathname.split("/").filter(Boolean);
-  const lastSegment = pathSegments[pathSegments.length - 1] ?? "image";
-  const filename = lastSegment.length > 0 ? lastSegment : "image";
-
-  return { base64, mimeType: contentType, fileSize: totalBytes, filename };
 }
