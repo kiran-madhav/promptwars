@@ -51,6 +51,13 @@ export async function POST(request: NextRequest): Promise<NextResponse<AnalysisR
       );
     }
 
+    if (file.size === 0) {
+      return NextResponse.json(
+        { success: false, error: "The uploaded file is empty. Please select a valid image." },
+        { status: 400 }
+      );
+    }
+
     if (file.size > MAX_FILE_SIZE) {
       return NextResponse.json(
         { success: false, error: "File too large. Maximum size is 10 MB." },
