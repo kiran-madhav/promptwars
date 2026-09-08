@@ -263,3 +263,76 @@ describe("analyzeImageWithGemini — fallback routing", () => {
     assert.ok(calls.length <= 2, `Must never exceed 2 requests. Made: ${calls.length}`);
   });
 });
+
+// ─── analyzeImageWithGemini — JSON parsing ──────────────────────────────────────
+
+describe("analyzeImageWithGemini — JSON parsing", () => {
+  const savedFetch = global.fetch;
+
+  afterEach(() => {
+    global.fetch = savedFetch;
+  });
+
+  function mockGeminiText(text: string) {
+    global.fetch = async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        candidates: [{ content: { parts: [{ text }] } }],
+      }),
+    }) as unknown as Response;
+  }
+
+  test("valid JSON is parsed correctly", async () => {
+    const report = makeReport("inconclusive", "low");
+    mockGeminiText(JSON.stringify(report));
+    const result = await analyzeImageWithGemini("base", "img", "key");
+    assert.equal(result.overallAssessment, "inconclusive");
+  });
+
+  test("JSON inside markdown fences is parsed correctly", async () => {
+    const report = makeReport("likely_synthetic", "high");
+    mockGeminiText(`\`\`\`json\n${JSON.stringify(report)}\n\`\`\``);
+    const result = await analyzeImageWithGemini("base", "img", "key");
+    assert.equal(result.overallAssessment, "likely_synthetic");
+  });
+
+  test("harmless surrounding text is ignored", async () => {
+    const report = makeReport("potentially_manipulated", "medium");
+    mockGeminiText(`Here is the analysis you requested:\n\n${JSON.stringify(report)}\n\nHope this helps!`);
+    const result = await analyzeImageWithGemini("base", "img", "key");
+    assert.equal(result.overallAssessment, "potentially_manipulated");
+  });
+
+  test("schema mismatch (missing required fields) throws a clean error after retry", async () => {
+    // Missing 'summary' field
+    const invalidReport = { overallAssessment: "inconclusive", confidence: "low" };
+    mockGeminiText(JSON.stringify(invalidReport));
+    
+    await assert.rejects(
+      () => analyzeImageWithGemini("base", "img", "key"),
+      /VERIFAI couldn't complete the AI analysis this time/
+    );
+  });
+
+  test("incomplete/truncated JSON triggers a single retry, then throws a clean error", async () => {
+    let callCount = 0;
+    global.fetch = async () => {
+      callCount++;
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          // Truncated string missing the closing brace
+          candidates: [{ content: { parts: [{ text: '{ "overallAssessment": "inconclusive"' }] } }],
+        }),
+      } as unknown as Response;
+    };
+
+    await assert.rejects(
+      () => analyzeImageWithGemini("base", "img", "key"),
+      /VERIFAI couldn't complete the AI analysis this time/
+    );
+    assert.equal(callCount, 2, "Must retry exactly once on parsing failure");
+  });
+});

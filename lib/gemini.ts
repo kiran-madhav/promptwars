@@ -194,13 +194,14 @@ export async function analyzeImageWithGemini(
       temperature: 0.1,
       topP: 0.8,
       maxOutputTokens: 4096,
+      responseMimeType: "application/json",
     },
   };
 
   const GEMINI_FALLBACK_API_URL =
     "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent";
 
-  async function attemptFetch(url: string, key: string) {
+  async function attemptFetchAndParse(url: string, key: string): Promise<VerificationReport> {
     const response = await fetch(`${url}?key=${key}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -216,58 +217,70 @@ export async function analyzeImageWithGemini(
       err.status = response.status;
       throw err;
     }
-    return response;
+
+    const data = (await response.json()) as {
+      candidates?: Array<{
+        content?: { parts?: Array<{ text?: string }> };
+      }>;
+    };
+
+    const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!rawText) {
+      throw new SyntaxError("Empty response from Gemini API.");
+    }
+
+    // Safely extract JSON even if surrounded by markdown fences or harmless text.
+    // Matches the first outermost JSON object.
+    const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      throw new SyntaxError("No JSON object found in response.");
+    }
+
+    let parsed: VerificationReport;
+    try {
+      parsed = JSON.parse(jsonMatch[0]) as VerificationReport;
+    } catch {
+      throw new SyntaxError("Invalid JSON structure.");
+    }
+
+    // Basic structural validation
+    if (!parsed.overallAssessment || !parsed.confidence || !parsed.summary) {
+      throw new SyntaxError("AI response missing required fields.");
+    }
+
+    return enforceConfidenceLimits(parsed);
   }
 
-  let response: Response;
   try {
-    response = await attemptFetch(GEMINI_API_URL, apiKey);
-  } catch (err: unknown) {
-    const error = err as Error & { status?: number };
-    const status = error.status;
-    const isNetworkError = error.name === "TypeError" || error.name === "AbortError";
-    const isTransientHttp = status === 429 || (status && status >= 500);
-    
-    const fallbackKey = process.env.GEMINI_FALLBACK_API_KEY;
-    if ((isNetworkError || isTransientHttp) && fallbackKey) {
-      console.warn(`[Gemini API] Primary model failed (Status: ${status || error.name}). Falling back to gemini-3.6-flash...`);
-      response = await attemptFetch(GEMINI_FALLBACK_API_URL, fallbackKey);
-    } else {
+    try {
+      return await attemptFetchAndParse(GEMINI_API_URL, apiKey);
+    } catch (err: unknown) {
+      const error = err as Error & { status?: number };
+      
+      // If it's a parsing error (SyntaxError), retry once on the primary model
+      if (error instanceof SyntaxError) {
+        console.warn("[Gemini API] Primary model returned malformed JSON. Retrying once...");
+        return await attemptFetchAndParse(GEMINI_API_URL, apiKey);
+      }
+
+      // If it's a network or transient HTTP error, fallback to gemini-3.6-flash
+      const status = error.status;
+      const isNetworkError = error.name === "TypeError" || error.name === "AbortError";
+      const isTransientHttp = status === 429 || (status && status >= 500);
+      
+      const fallbackKey = process.env.GEMINI_FALLBACK_API_KEY;
+      if ((isNetworkError || isTransientHttp) && fallbackKey) {
+        console.warn(`[Gemini API] Primary model failed (Status: ${status || error.name}). Falling back to gemini-3.6-flash...`);
+        return await attemptFetchAndParse(GEMINI_FALLBACK_API_URL, fallbackKey);
+      }
+      
       throw error;
     }
+  } catch (err: unknown) {
+    if (err instanceof SyntaxError) {
+      // Clean user-facing message replacing the raw output dump
+      throw new Error("VERIFAI couldn't complete the AI analysis this time. Please try again.");
+    }
+    throw err;
   }
-
-  const data = (await response.json()) as {
-    candidates?: Array<{
-      content?: { parts?: Array<{ text?: string }> };
-    }>;
-  };
-
-  const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!rawText) {
-    throw new Error("Empty response from Gemini API.");
-  }
-
-  // Strip markdown code fences if present
-  const cleaned = rawText
-    .replace(/^```(?:json)?\s*/i, "")
-    .replace(/\s*```\s*$/i, "")
-    .trim();
-
-  let parsed: VerificationReport;
-  try {
-    parsed = JSON.parse(cleaned) as VerificationReport;
-  } catch {
-    throw new Error(
-      "Failed to parse structured response from AI. Raw: " + cleaned.slice(0, 200)
-    );
-  }
-
-  // Basic structural validation
-  if (!parsed.overallAssessment || !parsed.confidence || !parsed.summary) {
-    throw new Error("AI response missing required fields.");
-  }
-
-  // Apply server-side guardrails — always runs regardless of model behaviour
-  return enforceConfidenceLimits(parsed);
 }
